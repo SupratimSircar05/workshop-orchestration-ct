@@ -19,6 +19,10 @@ Ordered states:
 
 Transitions are enforced in `app/services/workflow_engine.py` (single-step forward, plus `funding_ready` → `closed`). Partner webhooks may propose `target_state` with intentionally loose coupling.
 
+### Document integrity invariant
+
+A `documents_packaged` event reports that files are available; it does not prove that the expected files arrived. Before advancing a closing, orchestration must SHA-256 the staged PDF/TIFF bytes and require every expected digest to match, so a substituted or corrupted package cannot continue through the workflow. Hash file contents even when a document is empty, never derive the digest from its name, path, or borrower metadata, and keep tests isolated to synthetic data and test-owned temporary directories rather than cleaning a shared staging root.
+
 ## Run locally
 
 1. Start infrastructure:
