@@ -8,14 +8,20 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import ClosingCase, FundingChecklist, NotaryAssignment, WorkflowEvent
+from app.models import (
+    ClosingCase,
+    ClosingDocument,
+    FundingChecklist,
+    NotaryAssignment,
+    WorkflowEvent,
+)
 from app.schemas.closing import (
     AssignNotaryRequest,
     ClosingCreate,
     ClosingStatusResponse,
     ReminderRequest,
 )
-from app.services import notary_service, reminder_service
+from app.services import document_service, notary_service, reminder_service
 
 router = APIRouter(prefix="/closings", tags=["closings"])
 
@@ -51,6 +57,14 @@ async def closing_status(closing_id: uuid.UUID, db: AsyncSession = Depends(get_d
         await db.execute(select(FundingChecklist).where(FundingChecklist.closing_id == closing.id))
     ).scalar_one_or_none()
 
+    document_rows = (
+        await db.execute(
+            select(ClosingDocument)
+            .where(ClosingDocument.closing_id == closing.id)
+            .order_by(ClosingDocument.created_at.desc())
+        )
+    ).scalars().all()
+
     events = (
         await db.execute(
             select(WorkflowEvent)
@@ -67,6 +81,9 @@ async def closing_status(closing_id: uuid.UUID, db: AsyncSession = Depends(get_d
         lender_org_id=closing.lender_org_id,
         scheduled_signing_at=closing.scheduled_signing_at,
         los_callback_url=closing.los_callback_url,
+        documents=[
+            document_service.serialize_document_result(row) for row in document_rows
+        ],
         notary_assignments=[
             {
                 "id": str(r.id),
@@ -115,6 +132,8 @@ async def assign_notary(
         )
     except LookupError:
         raise HTTPException(status_code=404, detail="Closing not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
 
     await db.commit()
     await db.refresh(na)

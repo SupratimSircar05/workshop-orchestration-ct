@@ -25,3 +25,10 @@ class ActorType(str, Enum):
     NOTARY = "notary"
     SYSTEM = "system"
     PARTNER_WEBHOOK = "partner_webhook"
+
+
+class DocumentVerificationStatus(str, Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    MISMATCH = "mismatch"
+    ERROR = "error"

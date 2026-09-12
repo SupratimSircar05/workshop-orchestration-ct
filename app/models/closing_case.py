@@ -10,6 +10,7 @@ from app.database import Base
 from app.models.enums import WorkflowState
 
 if TYPE_CHECKING:
+    from app.models.closing_document import ClosingDocument
     from app.models.funding_checklist import FundingChecklist
     from app.models.notary_assignment import NotaryAssignment
     from app.models.workflow_event import WorkflowEvent
@@ -55,6 +56,10 @@ class ClosingCase(Base):
         cascade="all, delete-orphan",
     )
     funding_checklists: Mapped[list["FundingChecklist"]] = relationship(
+        back_populates="closing",
+        cascade="all, delete-orphan",
+    )
+    documents: Mapped[list["ClosingDocument"]] = relationship(
         back_populates="closing",
         cascade="all, delete-orphan",
     )

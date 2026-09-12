@@ -24,6 +24,7 @@ class ClosingStatusResponse(BaseModel):
     lender_org_id: str
     scheduled_signing_at: datetime | None
     los_callback_url: str | None
+    documents: list[dict[str, Any]]
     notary_assignments: list[dict[str, Any]]
     funding: dict[str, Any] | None
     recent_events: list[dict[str, Any]]

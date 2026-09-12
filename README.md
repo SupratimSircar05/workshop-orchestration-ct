@@ -21,7 +21,7 @@ Transitions are enforced in `app/services/workflow_engine.py` (single-step forwa
 
 ### Document integrity invariant
 
-A `documents_packaged` event reports that files are available; it does not prove that the expected files arrived. Before advancing a closing, orchestration must SHA-256 the staged PDF/TIFF bytes and require every expected digest to match, so a substituted or corrupted package cannot continue through the workflow. Hash file contents even when a document is empty, never derive the digest from its name, path, or borrower metadata, and keep tests isolated to synthetic data and test-owned temporary directories rather than cleaning a shared staging root.
+A `documents_packaged` event reports that files are available; it does not prove that the expected files arrived. Before advancing a closing, orchestration must SHA-256 the staged PDF/TIFF bytes and require every expected digest to match, so a substituted or corrupted package cannot continue through the workflow. Hash file contents even when a document is empty, never derive the digest from its name, path, or borrower metadata, and keep tests isolated to synthetic data and test-owned temporary directories rather than cleaning a shared staging root. Staging must be shared with the worker and immutable after packaging; a matching digest detects byte drift against the recorded Result but cannot authenticate this demo's unsigned webhook publisher.
 
 ## Run locally
 
@@ -51,6 +51,12 @@ A `documents_packaged` event reports that files are available; it does not prove
    celery -A app.tasks.celery_app worker -l info
    ```
 
+6. Run Celery beat (separate terminal) so committed-but-unpublished verification jobs are reconciled:
+
+   ```bash
+   celery -A app.tasks.celery_app beat -l info
+   ```
+
 Open docs at `http://localhost:8000/docs`.
 
 ### Quick integration smoke
@@ -67,7 +73,7 @@ curl -s -X POST localhost:8000/closings/<CLOSING_UUID>/assign-notary -H "Content
   -d "{\"notary_id\":\"notary-42\",\"trigger_los_sync\":true}"
 
 curl -s -X POST localhost:8000/webhooks/partner -H "Content-Type: application/json" \
-  -d "{\"partner_id\":\"los-acme\",\"event_type\":\"documents_packaged\",\"external_ref\":\"LOS-1001\"}"
+  -d "{\"partner_id\":\"los-acme\",\"event_type\":\"documents_packaged\",\"external_ref\":\"LOS-1001\",\"payload\":{\"documents\":[{\"filename\":\"package.pdf\",\"expected_sha256\":\"<64-hex-digest-of-staged-bytes>\"}]}}"
 ```
 
 ## HTTP surface
@@ -88,6 +94,7 @@ curl -s -X POST localhost:8000/webhooks/partner -H "Content-Type: application/js
 - **`WorkflowEvent`** — append-only audit of transitions.
 - **`NotaryAssignment`** — signing agent routing.
 - **`PartnerWebhookEvent`** — inbound partner payloads (raw JSON + header snapshot).
+- **`ClosingDocument`** — per-package expected/actual SHA-256 Result and verification status.
 - **`FundingChecklist`** — gating material toward `funding_ready` / `closed`.
 
 ## Background jobs
@@ -97,6 +104,8 @@ curl -s -X POST localhost:8000/webhooks/partner -H "Content-Type: application/js
 | `cos.send_reminder` | `app/tasks/jobs.py` | Stub reminder fan-out |
 | `cos.sync_los_callback` | same | Outbound GET to stored callback (**SSRF demo**) |
 | `cos.evaluate_funding` | same | Sync evaluation toward funding readiness |
+| `cos.verify_document_package` | same | Verify one persisted manifest, then release `draft` only if every Result matches |
+| `cos.reconcile_document_hash_dispatches` | same | Republish durable pending/failed verification dispatches |
 
 ## Security posture (intentional weaknesses)
 

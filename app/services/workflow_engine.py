@@ -51,10 +51,22 @@ async def apply_transition(
     actor_id: str | None,
     payload: dict[str, Any] | None = None,
     correlation_id: str | None = None,
+    document_verification_event_id: uuid.UUID | None = None,
 ) -> WorkflowEvent:
     prev = closing.state
     if not can_transition(prev, to_state):
         raise ValueError(f"Invalid transition {prev} -> {to_state}")
+
+    if _index(to_state) > _index(WorkflowState.DRAFT.value):
+        from app.services.document_service import package_results_allow_advance
+
+        verified = await package_results_allow_advance(
+            db,
+            closing_id=closing.id,
+            source_event_id=document_verification_event_id,
+        )
+        if not verified:
+            raise ValueError("document_hash_verification_required")
 
     closing.state = to_state
     evt = WorkflowEvent(
